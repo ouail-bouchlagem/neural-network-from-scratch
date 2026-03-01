@@ -63,7 +63,7 @@ class NeuralNetwork:
     def forward(self, input, structure=None):
         a = input.T
         if structure is not None:
-            structure[0]["a"] = input
+            structure[0]["a"] = a
 
         for i, layer in enumerate(self.w):
             z = self.w[i] @ a + self.b[i]
@@ -82,12 +82,17 @@ class NeuralNetwork:
         if self.loss_type == "MSE":
             return (y - y_) ** 2
         elif self.loss_type == "CE":
+            eps = 1e-15  # a very small number
+            y_ = np.clip(y_, eps, 1 - eps)
+
             return -(y * np.log(y_) + (1 - y) * np.log(1 - y_))
 
     def loss_function_derivative(self, a, y):
         if self.loss_type == "MSE":
             return -2 * (y - a)
         if self.loss_type == "CE":
+            eps = 1e-15
+            a = np.clip(a, eps, 1 - eps)
             return -y / a + (1 - y) / (1 - a)
 
     def fit(self, x, y, r=0.01, epochs=1, splitting_factor=10):
@@ -111,26 +116,34 @@ class NeuralNetwork:
     def update(self, x, y, r):
         network_structure = [{} for _ in range(len(self.w) + 1)]
         self.forward(x, network_structure)
-        cost = self.cost(x, y)
-        # print(cost)
         x, y = x.T, y.T
         a = network_structure[-1]["a"]
         z = network_structure[-1]["z"]
+        pre_a = network_structure[-2]["a"]
         da = self.loss_function_derivative(a, y)
         dz = self.activation_derivative(z, -1) * da
-        db = np.mean(dz, axis=1, keepdims=True)
-        pre_a = network_structure[-2]["a"]
+        db = np.sum(dz, axis=1, keepdims=True) / dz.shape[1]
         dw = (dz @ pre_a.T)/y.shape[1]
         self.b[-1] -= r * db
         self.w[-1] -= r * dw
 
         for i in range(-2,-len(network_structure),-1): 
-            print(i)
-        
+            post_a = network_structure[i+1]["a"]
+            a = network_structure[i]["a"]
+            z = network_structure[i]["z"]
+            pre_a = network_structure[i-1]["a"]
+
+            da = self.w[i+1].T @ dz
+            dz = da * self.activation_derivative(z, i)
+            db = np.sum(dz, axis=1, keepdims=True) / dz.shape[1]
+            dw = (dz @ pre_a.T)/y.shape[1]
+            self.b[i] -= r * db
+            self.w[i] -= r * dw
+            
 
 
 
-data_size = 77
+data_size = 400
 data = pd.DataFrame(
     {
         "A": np.random.randint(-10, 10, data_size),
@@ -147,15 +160,15 @@ x = data[["A", "B"]].values
 y = data[["sum_is_positive", "sum_is_pair"]].values
 
 
-netty = NeuralNetwork(2, (1, 2), ["LReLU", "sigmoid"], "CE")
+netty = NeuralNetwork(2, (1,3,3, 2), ["LReLU","LReLU","LReLU", "sigmoid"], "CE")
 
-# print(netty.cost(x, y))
-netty.fit(x=x, y=y, r=0.001, epochs=1 , splitting_factor=1)
-# print(netty.cost(x, y))
+print(netty.cost(x, y))
+netty.fit(x=x, y=y, r=0.02, epochs=10**4 , splitting_factor=1)
+print(netty.cost(x, y))
 
-# #calc the accuracy
-# y_pred = netty.forward(x)
-# y_pred_labels = np.argmax(y_pred, axis=1)
-# y_true_labels = np.argmax(y, axis=1)
-# accuracy = np.mean(y_pred_labels == y_true_labels)
-# print(f"Accuracy: {accuracy * 100:.2f}%")
+#calc the accuracy
+y_pred = netty.forward(x)
+y_pred_labels = np.argmax(y_pred, axis=1)
+y_true_labels = np.argmax(y, axis=1)
+accuracy = np.mean((y_pred > 0.5) == y)
+print(f"Accuracy: {accuracy * 100:.2f}%")
