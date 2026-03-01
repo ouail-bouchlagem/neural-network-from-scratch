@@ -112,24 +112,25 @@ class NeuralNetwork:
         network_structure = [{} for _ in range(len(self.w) + 1)]
         self.forward(x, network_structure)
         cost = self.cost(x, y)
-        print(cost)
+        # print(cost)
         x, y = x.T, y.T
-
         a = network_structure[-1]["a"]
         z = network_structure[-1]["z"]
         da = self.loss_function_derivative(a, y)
         dz = self.activation_derivative(z, -1) * da
         db = np.mean(dz, axis=1, keepdims=True)
         pre_a = network_structure[-2]["a"]
-        dw = (dz @ pre_a.T)
-        dw /= dw.shape[0]
+        dw = (dz @ pre_a.T)/y.shape[1]
         self.b[-1] -= r * db
         self.w[-1] -= r * dw
+
+        for i in range(-2,-len(network_structure),-1): 
+            print(i)
         
 
 
 
-data_size = 3
+data_size = 77
 data = pd.DataFrame(
     {
         "A": np.random.randint(-10, 10, data_size),
@@ -148,9 +149,9 @@ y = data[["sum_is_positive", "sum_is_pair"]].values
 
 netty = NeuralNetwork(2, (1, 2), ["LReLU", "sigmoid"], "CE")
 
-print(netty.cost(x, y))
+# print(netty.cost(x, y))
 netty.fit(x=x, y=y, r=0.001, epochs=1 , splitting_factor=1)
-print(netty.cost(x, y))
+# print(netty.cost(x, y))
 
 # #calc the accuracy
 # y_pred = netty.forward(x)
